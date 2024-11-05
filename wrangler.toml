@@ -1,10 +1,10 @@
-name = "restless-meadow-1478"
+name = "kacky-finish-tracker"
 main = "src/worker.js"
 compatibility_date = "2024-11-05"
 workers_dev = true
 
 [triggers]
-crons = [ "*/1 * * * *" ]
+crons = [ "*/1 * * * *", "0 */2 * * *" ]
 
 [[kv_namespaces]]
 id = "80f8d29c9e1c48558cc11890c7632b11"
