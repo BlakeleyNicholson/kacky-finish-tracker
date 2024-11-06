@@ -117,17 +117,24 @@ async function handleFinCheck(event, env, ctx) {
             }
         }
 
-        const ttvToken = await env.FINSTORE.get("TTV_Token");
-        const clipInfo = await createClip(ttvToken, env.CLIENT_ID);
-        console.log(clipInfo["data"][0]["id"]);
-        const clip = await getClipById(ttvToken, env.CLIENT_ID, clipInfo["data"][0]["id"]);
-        // console.log(clip);
-
         let content = `<@592916714639982592>\nWirtual finished ${unfinnedMap} at <t:${Math.floor(Date.now() / 1000)}:t>`
 
-        if (clip) {
-            content = content + `\n${clip["data"][0]["url"]}`
+        const ttvToken = await env.FINSTORE.get("TTV_Token");
+        const clipInfo = await createClip(ttvToken, env.CLIENT_ID);
+        console.log(clipInfo);
+        if (clipInfo.status === 404) {
+            console.log("Wirtual is offline");
+            content = content + `\nIt looks like Wirtual is offline, so no clip D:`
+        } else {
+            const clip = await getClipById(ttvToken, env.CLIENT_ID, clipInfo["data"][0]["id"]);
+            if (clip) {
+                content = content + `\n${clip["data"][0]["url"]}`
+            } else {
+                content = content + `\nAn error occurred when getting the clip D:`
+            }
         }
+        // console.log(clipInfo["data"][0]["id"]);
+        // console.log(clip);
 
         await env.FINSTORE.put("WirtualTM", JSON.stringify(newFinsJson));
 
