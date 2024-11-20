@@ -106,31 +106,83 @@ async function handleFinCheck(event, env, ctx) {
     const oldFinnedMaps = Object.keys(oldFins);
     const newFinnedMaps = Object.keys(newFinsJson);
 
-    // if (true) {
-    if (oldFinnedMaps.length !== newFinnedMaps.length) {
-        let unfinnedMap = "304"; // Default value for testing, should always be replaced with another
+    let improvedMap;
 
-        for(const map of newFinnedMaps) {
-            if (!oldFinnedMaps.includes(map)) {
-                unfinnedMap = map;
-                console.log(map);
+    if (oldFinnedMaps.length === newFinnedMaps.length && JSON.stringify(oldFins) !== JSON.stringify(newFinsJson)) {
+        for (const map in newFinsJson) {
+            if (oldFins[map]["kacky_rank"] > newFinsJson[map]["kacky_rank"]) {
+                improvedMap = map; // There is a map for which rank has decreased
             }
         }
+        if (!improvedMap) { // !improvedMap should only happen if rank increases, i.e. someone else finned
+            // It should happen rarely enough that I can do this without overrunning KV write limits but who knows
+            await env.FINSTORE.put("WirtualTM", JSON.stringify(newFinsJson));
+            console.log("There was not an improved map but the fin dicts differed, updating...")
+        }
+    }
 
-        let content = `<@592916714639982592>\nWirtual finished ${unfinnedMap} at <t:${Math.floor(Date.now() / 1000)}:t>`
+    if (oldFinnedMaps.length !== newFinnedMaps.length || improvedMap) {
+        let content;
+        if (oldFinnedMaps.length !== newFinnedMaps.length) {
+            let unfinnedMap = "default-map"; // Default value for testing, should always be replaced with another
+
+            for (const map of newFinnedMaps) {
+                if (!oldFinnedMaps.includes(map)) {
+                    unfinnedMap = map;
+                    // console.log(map);
+                }
+            }
+
+            content = `<@592916714639982592>\nWirtual finished ${unfinnedMap} at <t:${Math.floor(Date.now() / 1000)}:t>`
+        } else {
+            content = `Wirtual improved ${improvedMap} at <t:${Math.floor(Date.now() / 1000)}:t>`
+        }
 
         const ttvToken = await env.FINSTORE.get("TTV_Token");
         const clipInfo = await createClip(ttvToken, env.CLIENT_ID);
+
         console.log(clipInfo);
+
         if (clipInfo.status === 404) {
             console.log("Wirtual is offline");
-            content = content + `\nIt looks like Wirtual is offline, so no clip D:`
-        } else {
-            const clip = await getClipById(ttvToken, env.CLIENT_ID, clipInfo["data"][0]["id"]);
-            if (clip) {
-                content = content + `\n${clip["data"][0]["url"]}`
+            content = content + `\nIt looks like Wirtual is offline, so no clip D:`;
+        } else if (clipInfo.status === 401) {
+            console.error("OAuth token was invalid at clip time, attempting to refresh...");
+            // content = content + `\nThe OAuth token is invalid, probably out of date for some reason.`;
+            const refreshedToken = await refreshTwitchToken(env.TWITCH_API_REFRESH_TOKEN, env.CLIENT_ID, env.CLIENT_SECRET);
+            await env.FINSTORE.put("TTV_Token", refreshedToken["access_token"]);
+
+            const newClipInfo = await createClip(refreshedToken["access_token"], env.CLIENT_ID);
+            if (newClipInfo.status === 404) {
+                console.log("Wirtual is offline");
+                content = content + `\nIt looks like Wirtual is offline, so no clip D:`;
+            } else if (newClipInfo.status === 401) {
+                console.error("OAuth token was still invalid after refresh!");
+                content = content + `\nAn error occured when getting the clip: The OAuth token was invalid after refresh.`;
             } else {
-                content = content + `\nAn error occurred when getting the clip D:`
+                try {
+                    const clip = await getClipById(refreshedToken["access_token"], env.CLIENT_ID, newClipInfo["data"][0]["id"]);
+                    if (clip) {
+                        content = content + `\n${clip["data"][0]["url"]}`;
+                    } else {
+                        content = content + `\nAn error occurred when getting the clip D:`;
+                    }
+                } catch (e) {
+                    console.error(e);
+                    content += content + `\nAn error occured when getting the clip D:\n${e}`;
+                }
+            }
+        } else {
+            try {
+                const clip = await getClipById(ttvToken, env.CLIENT_ID, clipInfo["data"][0]["id"]);
+                if (clip) {
+                    content = content + `\n${clip["data"][0]["url"]}`;
+                } else {
+                    content = content + `\nAn error occurred when getting the clip D:`;
+                }
+            } catch (e) {
+                console.error(e);
+                content += content + `\nAn error occured when getting the clip D:\n${e}`;
             }
         }
         // console.log(clipInfo["data"][0]["id"]);
@@ -168,7 +220,7 @@ async function handleFinCheck(event, env, ctx) {
             requestOptions
         );
     } else {
-        console.log("finishes up to date");
+        // console.log("finishes up to date");
         return new Response("finishes up to date");
     }
 }
@@ -181,7 +233,7 @@ export default {
     },
 
 	async scheduled(event, env, ctx) {
-        if (event.cron === "* */1 * * *") {
+        if (event.cron === "* */2 * * *") {
             console.log("Refreshing ttv token");
             // Process the hourly cron, i.e. refresh the TTV token
             const refreshedToken = await refreshTwitchToken(env.TWITCH_API_REFRESH_TOKEN, env.CLIENT_ID, env.CLIENT_SECRET);

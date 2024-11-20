@@ -1,13 +1,14 @@
 {
-  "name": "kacky-finish-tracker",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev"
-  },
-  "devDependencies": {
-    "wrangler": "^3.60.3"
-  }
+    "name": "kacky-finish-tracker",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "deploy": "wrangler deploy",
+        "dev": "wrangler dev",
+        "start": "wrangler dev",
+        "dev test scheduled": "wrangler dev --test-scheduled"
+    },
+    "devDependencies": {
+        "wrangler": "^3.60.3"
+    }
 }
